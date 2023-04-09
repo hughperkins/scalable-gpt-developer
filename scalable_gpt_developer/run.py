@@ -156,6 +156,15 @@ def run(args):
         with open(api_spec_filepath, 'w') as f:
             json.dump(api_spec, f, indent=2)
             print('saved api_spec to ', api_spec_filepath)
+    
+    if api_spec is not None and args.wipe_missing_from_api_spec:
+        _file_names = list(files.keys())
+        for filename in _file_names:
+            if filename not in api_spec:
+                _filepath = join(args.in_working_dir, filename)
+                os.remove(_filepath)
+                print('wiped file not in api spec: ', _filepath)
+                del files[filename]
     api_spec_updated = True
     while api_spec_updated:
         api_spec_updated = False
@@ -210,6 +219,7 @@ if __name__ == '__main__':
         help='task file to read, describing the app to create')
     parser.add_argument('--in-working-dir', type=str, default='app', help='where to write generated files to')
     parser.add_argument('--wipe-working-dir', action='store_true', help='wipe contents of --in-working-dir')
+    parser.add_argument('--wipe-missing-from-api-spec', action='store_true', help='wipe any files not in api_spec, and not excluded')
     parser.add_argument('--model', type=str, default='gpt-4', help='name of openai chat model')
     parser.add_argument(
         '--exclude-dirs', nargs='+', default=['__pycache__', '.git'],
