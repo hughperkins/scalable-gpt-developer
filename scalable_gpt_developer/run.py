@@ -2,6 +2,8 @@
 import os
 import openai
 import argparse
+from os import path
+from os.path import join
 import json
 import shutil
 import tenacity
@@ -103,6 +105,23 @@ def run_openai(prompt, model) -> str:
     return res_str
 
 
+def load_files(base_dir: str, files: dict[str, str], rel_dir: str, exclude_dirs: list[str]) -> None:
+    dir_path = join(base_dir, rel_dir)
+    for filename in os.listdir(dir_path):
+        _full_path = join(dir_path, filename)
+        if path.isdir(_full_path):
+            if filename not in exclude_dirs:
+                load_files(base_dir=base_dir, files=files, rel_dir=join(rel_dir, filename), exclude_dirs=exclude_dirs)
+        elif path.isfile(_full_path):
+            with open(_full_path) as f:
+                _contents = f.read()
+            rel_filepath = join(rel_dir, filename)
+            if rel_filepath.startswith('./'):
+                rel_filepath = rel_filepath[2:]
+            files[rel_filepath] = _contents
+            print('loaded', rel_filepath)
+
+
 def run(args):
     if args.wipe_working_dir:
         assert args.in_working_dir not in ['', '.', '/']
@@ -112,15 +131,7 @@ def run(args):
         os.makedirs(args.in_working_dir)
 
     files = {}
-
-    for filename in os.listdir(args.in_working_dir):
-        _full_path = os.path.join(args.in_working_dir, filename)
-        if not os.path.isfile(_full_path):
-            continue
-        with open(_full_path) as f:
-            _contents = f.read()
-        files[filename] = _contents
-        print('loaded', filename)
+    load_files(args.in_working_dir, files, '.', args.exclude_dirs)
 
     with open(args.in_task_file) as f:
         task = f.read()
@@ -174,7 +185,12 @@ def run(args):
             print('got changes. processing')
             files[filename] = res_dict[filename]
             assert '..' not in filename
-            with open(os.path.join(args.in_working_dir, filename), 'w') as f:
+            _target_file_path = join(args.in_working_dir, filename)
+            _target_file_parent_dir = path.dirname(_target_file_path)
+            if not path.isdir(_target_file_parent_dir):
+                os.makedirs(_target_file_parent_dir)
+                print('created dir', _target_file_parent_dir)
+            with open(_target_file_path, 'w') as f:
                 f.write(res_dict[filename])
             if 'updated_api' in res_dict and len(res_dict['updated_api']) > 0:
                 print('updating api spec')
@@ -189,9 +205,14 @@ def run(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in-task-file', type=str, default='tasks/react_app1.txt')
-    parser.add_argument('--in-working-dir', type=str, default='app')
-    parser.add_argument('--wipe-working-dir', action='store_true')
-    parser.add_argument('--model', type=str, default='gpt-4')
+    parser.add_argument(
+        '--in-task-file', type=str, default='tasks/react_app1.txt',
+        help='task file to read, describing the app to create')
+    parser.add_argument('--in-working-dir', type=str, default='app', help='where to write generated files to')
+    parser.add_argument('--wipe-working-dir', action='store_true', help='wipe contents of --in-working-dir')
+    parser.add_argument('--model', type=str, default='gpt-4', help='name of openai chat model')
+    parser.add_argument(
+        '--exclude-dirs', nargs='+', default=['__pycache__', '.git'],
+        help='folders to not load files fromon app start')
     args = parser.parse_args()
     run(args)
