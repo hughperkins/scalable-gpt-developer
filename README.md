@@ -65,3 +65,10 @@ better results, but is also slower, and costs 30 times more (yes! 30 times!).
 
 [test_app_react](test_app_react) is just a React starter app, into which I copied the files from [app/client/src](app/client/src).
 It doesnt run yet, but it seems close-ish...
+
+Note that to run this you have to do:
+
+```
+npm install
+npm install react-modal   # gpt4 didnt add this to package.json, for reasons unknown
+```
