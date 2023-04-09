@@ -160,7 +160,7 @@ def run(args):
     if api_spec is not None and args.wipe_missing_from_api_spec:
         _file_names = list(files.keys())
         for filename in _file_names:
-            if filename not in api_spec:
+            if filename not in api_spec and filename != 'api_spec.json':
                 _filepath = join(args.in_working_dir, filename)
                 os.remove(_filepath)
                 print('wiped file not in api spec: ', _filepath)
