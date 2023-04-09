@@ -1,0 +1,82 @@
+{
+  "server.py": {
+    "depends": [
+      "aiohttp",
+      "routes.py",
+      "cors_middleware.py"
+    ]
+  },
+  "routes.py": {
+    "depends": [
+      "handlers.py"
+    ]
+  },
+  "handlers.py": {
+    "depends": [
+      "openai",
+      "os",
+      "response_parser.py"
+    ]
+  },
+  "response_parser.py": {
+    "depends": []
+  },
+  "cors_middleware.py": {
+    "depends": [
+      "aiohttp.web_middlewares"
+    ]
+  },
+  "client/package.json": {
+    "depends": [
+      "react",
+      "react-dom",
+      "axios"
+    ]
+  },
+  "client/src/index.js": {
+    "depends": [
+      "client/src/App.js",
+      "client/src/index.css",
+      "react",
+      "react-dom"
+    ]
+  },
+  "client/src/App.js": {
+    "depends": [
+      "client/src/FileModal.js",
+      "client/src/FileList.js",
+      "client/src/PromptForm.js",
+      "client/src/CompletionBox.js",
+      "client/src/App.css",
+      "react",
+      "axios"
+    ]
+  },
+  "client/src/FileModal.js": {
+    "depends": [
+      "react"
+    ]
+  },
+  "client/src/FileList.js": {
+    "depends": [
+      "react",
+      "client/src/FileModal.js"
+    ]
+  },
+  "client/src/PromptForm.js": {
+    "depends": [
+      "react"
+    ]
+  },
+  "client/src/CompletionBox.js": {
+    "depends": [
+      "react"
+    ]
+  },
+  "client/src/App.css": {
+    "depends": []
+  },
+  "client/src/index.css": {
+    "depends": []
+  }
+}

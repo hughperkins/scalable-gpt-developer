@@ -1,0 +1,63 @@
+OpenAI has a python completions api that you can call like:
+
+import os
+import openai
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+res = openai.ChatCompletion.create(
+  model="gpt-3.5-turbo",
+  messages=[
+    {"role": "user", "content": "Hello!"}
+  ]
+)
+
+print(completion.choices[0].message)
+
+In our own code, please use model 'gpt-4' instead of 'gpt-3.5-turbo'.
+
+The 'content' field here is called the 'prompt'.
+
+The res object looks like:
+
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "\n\nHello there, how may I assist you today?",
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 12,
+    "total_tokens": 21
+  }
+}
+
+The completion is the value of the 'content' field.
+
+Please create a website, using python aiohttp and React, which will create an interface where a user can type in a prompt, into a multiline text field, and the completion will display in a second multiline text field underneath, when the user clicks a 'submit' button.
+
+Please use a 'single page application', using React.
+
+Make sure I dont get any errors like
+```
+Access to XMLHttpRequest at 'http://localhost:8080/chat' from origin 'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+```
+or:
+```
+Access to fetch at 'http://localhost:8080/chat' from origin 'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+```
+
+Sometimes the completion will contain files, which will be formatted something like:
+
+some_file_name.py
+```python
+the file contents goes here
+```
+
+When such files exist, please do not display these files in the completion text box. Instead, please create a list of filenames on the left. If I click on one of these filenames, the contents will show in a modal window, with a scrollbar. I should be able to easily click into the window, use ctrl-a to select all, then ctrl-c to copy the contents of the file. The remainder of the completion should still be shown, separately.
