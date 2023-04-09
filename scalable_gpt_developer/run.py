@@ -95,13 +95,13 @@ def run_openai(prompt, model) -> str:
         model=model,
         max_tokens=1024,
         stream=True)
-    print('')
     print('assistant writes:')
     res_str = ''
     for bit_dict in res:
         bit_str = bit_dict['choices'][0]['delta'].get('content', '')
         print(bit_str, end='', flush=True)
         res_str += bit_str
+    print('')
     return res_str
 
 
@@ -169,6 +169,7 @@ def run(args):
     while api_spec_updated:
         api_spec_updated = False
         for filename in api_spec.keys():
+            print(filename)
             got_new_contents = False
             while True:
                 try:
