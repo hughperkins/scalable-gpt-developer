@@ -11,20 +11,32 @@ import tenacity
 
 
 api_spec_instructions = """api_spec description:
+
 api_spec is a dictionary. The keys are the filepaths of
 each file in the project. Each value contains the api information about that file,
 sufficient that someone can write a correct implementation of that file, without
 reading any other parts of the program. The format of this value is a dictionary,
 which we will refer to here as api_info.
+
 api_info has a value 'depends', that contains a list of the names of all the project files
-that this file depends on directly. Do not include system libraries or third-party libraries in depends.
+that this file depends on directly. Do NOT include standard libraries, system libraries or
+third-party libraries in 'depends' value.
+
 The key 'exported_functions' describes any functions that are exported from the file.
 It includes full details of parameter names and types, and return type.
 The key 'exported_classes' desccribes any classes that are exported from the file.
 The key 'web_methods' describes any http methods exported from the file, such as get or post.
 The format of both the json request, and the json response, should be fully and clearly specified.
 Make sure that any project filenames are not easy to confuse with external library names.
-Prefer to use classes rather than dictionaries for specifying function and method parameters, and return types.
+Make sure that all filepaths are relative paths, not absolute paths.
+Try not to use dictionaries when specifying function and method parameters, or return types. Use classes
+instead, e.g. dataclasses, or named tuples.
+
+If a file will call a method in a second file, that method MUST be defined in the api spec of the
+second file, along with parameter names and types, and the return type.
+
+Reminder: Do NOT include standard libraries, system libraries or
+third-party libraries in 'depends' value.
 """
 
 updating_api_spec = """If you find that the api_spec is wrong, or inconsistent, or lacks detail, please add a key to
@@ -42,6 +54,8 @@ If this is a python file, please ensure that it is pep8-compliant.
 
 file_correctness_check = """File correctness check:
 Please check the contents of the file against the api_spec, against the linter_output, for correctness.
+If the file calls a function imported from another file, that function MUST be defined in the api
+spec for the other file.
 
 If the contents of the file need to be updated, please add a key {filename} to output_dict, where
 the value is a string which is the complete updated implementation of {filename}.
@@ -231,7 +245,10 @@ def run(args):
                             linter_output = ''
                         prompt = g_prompt_file_update.format(
                             api_spec=api_spec, filename=filename, task=task, file_contents=files[filename],
-                            linter_output=linter_output)
+                            linter_output=linter_output,
+                            api_spec_instructions=api_spec_instructions,
+                            file_correctness_check=file_correctness_check,
+                            updating_api_spec=updating_api_spec)
                     else:
                         prompt = g_prompt_file.format(
                             api_spec=api_spec, filename=filename, task=task,
@@ -243,7 +260,7 @@ def run(args):
                     # if res_str.strip().upper() == 'VALID':
                     #     got_new_contents = False
                     #     break
-                    res_str = res_str.replace('None', 'null')
+                    # res_str = res_str.replace('None', 'null')
                     res_dict = json.loads(res_str)
                     # if 'valid' in res_dict:
                     #     got_new_contents = False
@@ -255,9 +272,12 @@ def run(args):
                     print(e)
                     print('retrying file...')
             if got_new_contents:
-                print('got changes. processing')
+                print('got changes. processing', filename)
                 files[filename] = res_dict[filename]
                 assert '..' not in filename
+                assert not filename.startswith('/')
+                # if filename.startswith('/'):
+                #     filename = filename[1:]
                 _target_file_path = join(args.in_working_dir, filename)
                 _target_file_parent_dir = path.dirname(_target_file_path)
                 if not path.isdir(_target_file_parent_dir):
@@ -265,6 +285,7 @@ def run(args):
                     print('created dir', _target_file_parent_dir)
                 with open(_target_file_path, 'w') as f:
                     f.write(res_dict[filename])
+                    print('wrote', _target_file_path)
             else:
                 print('no change to file')
             if 'updated_api' in res_dict and len(res_dict['updated_api']) > 0:
