@@ -1,5 +1,6 @@
 # assumes that openai api key is in env var OPENAI_API_KEY
 import os
+import subprocess
 import openai
 import argparse
 from os import path
@@ -9,20 +10,59 @@ import shutil
 import tenacity
 
 
+api_spec_instructions = """api_spec description:
+api_spec is a dictionary. The keys are the filepaths of
+each file in the project. Each value contains the api information about that file,
+sufficient that someone can write a correct implementation of that file, without
+reading any other parts of the program. The format of this value is a dictionary,
+which we will refer to here as api_info.
+api_info has a value 'depends', that contains a list of the names of all the project files
+that this file depends on directly. Do not include system libraries or third-party libraries in depends.
+The key 'exported_functions' describes any functions that are exported from the file.
+It includes full details of parameter names and types, and return type.
+The key 'exported_classes' desccribes any classes that are exported from the file.
+The key 'web_methods' describes any http methods exported from the file, such as get or post.
+The format of both the json request, and the json response, should be fully and clearly specified.
+Make sure that any project filenames are not easy to confuse with external library names.
+Prefer to use classes rather than dictionaries for specifying function and method parameters, and return types.
+"""
+
+updating_api_spec = """If you find that the api_spec is wrong, or inconsistent, or lacks detail, please add a key to
+output_dict 'updated_api'. The value for this key should be another dictionary, let's call
+it updated_api_info. updated_api_info should contain a key for each filename whose api you need to update,
+and the value should be the full updated api_info for that file. Do not add keys for files whose api does not need
+updating.
+"""
+
+file_instructions = """
+If this is a python file, please ensure that mypy types are added to all method and function parameters,
+and to the return type.
+If this is a python file, please ensure that it is pep8-compliant.
+"""
+
+file_correctness_check = """File correctness check:
+Please check the contents of the file against the api_spec, against the linter_output, for correctness.
+
+If the contents of the file need to be updated, please add a key {filename} to output_dict, where
+the value is a string which is the complete updated implementation of {filename}.
+If no changes are needed to the file do NOT add the key {filename} to output_dict.
+
+If you are unable to write the full implementation, then make sure to update the api spec
+so that you have sufficient information to complete the task; or update the api spec to break the file into
+multiple smaller files.
+"""
+
 g_prompt_initial = """Task:
 {task}
 (End of task description)
 
 Please divide the project into small self-contained classes or similar.
 
-Please start by creating a json document, where the keys are the names of
-each file in the program. Each value will contain the api information about that file,
-sufficient that someone can write a correct implementation of that file, without
-reading any other parts of the program. The format of this value is a dictionary,
-which we will refer to here as api_info.
-api_info has a value 'depends', that contains a list of the names of all the files
-that this file depends on directly. Create any other values in api_info dictionary to
-fully describe the public api of each file or class. Do not write any explanations.
+Please start by creating api_spec json document.
+
+{api_spec_instructions}
+
+Output only the api_spec json dictionary. Do not write any explanations.
 """
 
 
@@ -30,26 +70,24 @@ g_prompt_file = """Task:
 {task}
 (End of task description)
 
-Here is a set of api specifications you wrote earlier. The keys are filenames, and the
-values are descriptions of the api of each file. Let's call each value api_info. So,
-each api_info has a key 'depends', which is a list of the filenames of all the files on which
-a file depends directly, e.g. imports from.
-
+Here is a set of api specifications you wrote earlier.
 {api_spec}
-(end of api spec)
+(end of api_spec)
 
-You are going to write full implementation of the file {filename}. Please output a json dictionary
-with a key {filename}, and the value is a string which is the complete implementation of {filename}.
-If you find that the api_spec is wrong, or inconsistent, or lacks detail, please add a key to
-the output json dictionary 'updated_api'. The value for this key should be another dictionary, let's call
-it updated_api_info. updated_api_info should contain a key for each filename whose api you need to update,
-and the value should be the full updated api_info for that file. Do not write any explanations.
+{api_spec_instructions}
 
-If you are unable to write the full implementation, then make sure to update the api spec, using update_api,
-so that you have sufficient information to complete the task; or update update_api to break the file into
-multiple smaller files.
+You are going to write the full implementation of the file {filename}.
 
-Do not write placeholder implementations without outputing an updated update_api
+{file_correctness_check}
+
+{file_instructions}
+
+Please output a json dictionary, which we will refer to as output_dict.
+Add a key {filename} to output_dict, whose value is a string which is the complete implementation of {filename}.
+
+{updating_api_spec}
+
+Output only output_dict. Do not write explanations.
 """
 
 
@@ -57,35 +95,42 @@ g_prompt_file_update = """Task:
 {task}
 (End of task description)
 
-Here is a set of api specifications you wrote earlier. The keys are filenames, and the
-values are descriptions of the api of each file. Let's call each value api_info. So,
-each api_info has a key 'depends', which is a list of the filenames of all the files on which
-a file depends directly, e.g. imports from.
-
+Here is a set of api specifications you wrote earlier.
 {api_spec}
-(end of api spec)
+(end of api_spec)
+
+{api_spec_instructions}
 
 Here is the current contents of {filename}:
 {file_contents}
 (End of file contents)
 
-Please check the contents of this file against the api_spec, and also check if it is valid.
+Linter output:
+{linter_output}
+(end of linter output)
 
-If it is valid then please output only VALID.
+Output:
+Your output should be a json dictionary. We will refer to it here as output_dict.
 
-If the contents of the file need to be updated, then please output a json dictionary
-with a key {filename}, and the value is a string which is the complete updated implementation of {filename}.
-If you find that the api_spec is wrong, or inconsistent, or lacks detail, please add a key to
-the output json dictionary 'updated_api'. The value for this key should be another dictionary, let's call
-it updated_api_info. updated_api_info should contain a key for each filename whose api you need to update,
-and the value should be the full updated api_info for that file. Do not write any explanations.
+{file_correctness_check}
 
-If you are unable to write the full implementation, then make sure to update the api spec, using update_api,
-so that you have sufficient information to complete the task; or update update_api to break the file into
-multiple smaller files.
+{api_spec_instructions}
 
-Do not write placeholder implementations without outputing an updated update_api
+{updating_api_spec}
+
+If you need to update the file, or the api_spec,
+please add a key to the output json 'reason', where you explain what you've changed in
+the file; and a key {filename} whose value is a string containing the full corrected implementation.
+
+please add a key to output_dict 'thoughts', which is a list of your thoughts. Please think step by step about what you
+need to change, and write each thought into 'thoughts' value. Please write out the thoughts key first, before any other
+keys
+
+Do not write any explanations. Only output output_dict.
 """
+
+# If the file is completely correct, and the api_spec is sufficient to unambiguously ensure that the rest of the
+# application will work fine, and only then, then please add a key 'valid' to output_dict, with the value 'true'.
 
 
 @tenacity.retry(stop=tenacity.stop_after_attempt(7), wait=tenacity.wait_fixed(0.1))
@@ -122,6 +167,12 @@ def load_files(base_dir: str, files: dict[str, str], rel_dir: str, exclude_dirs:
             print('loaded', rel_filepath)
 
 
+def run_flake8(working_dir: str, rel_filepath: str) -> str:
+    p = subprocess.run(['flake8', rel_filepath], cwd=working_dir, stdout=subprocess.PIPE)
+    flake8_output = p.stdout.decode('utf-8')
+    return flake8_output
+
+
 def run(args):
     if args.wipe_working_dir:
         assert args.in_working_dir not in ['', '.', '/']
@@ -143,7 +194,7 @@ def run(args):
         with open(api_spec_filepath) as f:
             api_spec = json.load(f)
     if api_spec is None:
-        prompt = g_prompt_initial.format(task=task)
+        prompt = g_prompt_initial.format(task=task, api_spec_instructions=api_spec_instructions)
         while True:
             try:
                 res_str = run_openai(prompt=prompt, model=args.model)
@@ -174,43 +225,59 @@ def run(args):
             while True:
                 try:
                     if filename in files:
+                        if filename.endswith('.py'):
+                            linter_output = run_flake8(working_dir=args.in_working_dir, rel_filepath=filename)
+                        else:
+                            linter_output = ''
                         prompt = g_prompt_file_update.format(
-                            api_spec=api_spec, filename=filename, task=task, file_contents=files[filename])
+                            api_spec=api_spec, filename=filename, task=task, file_contents=files[filename],
+                            linter_output=linter_output)
                     else:
-                        prompt = g_prompt_file.format(api_spec=api_spec, filename=filename, task=task)
+                        prompt = g_prompt_file.format(
+                            api_spec=api_spec, filename=filename, task=task,
+                            api_spec_instructions=api_spec_instructions,
+                            file_correctness_check=file_correctness_check,
+                            file_instructions=file_instructions,
+                            updating_api_spec=updating_api_spec)
                     res_str = run_openai(prompt=prompt, model=args.model)
-                    if res_str.strip().upper() == 'VALID':
-                        got_new_contents = False
-                        break
+                    # if res_str.strip().upper() == 'VALID':
+                    #     got_new_contents = False
+                    #     break
                     res_str = res_str.replace('None', 'null')
                     res_dict = json.loads(res_str)
-                    got_new_contents = True
+                    # if 'valid' in res_dict:
+                    #     got_new_contents = False
+                    #     continue
+                    if filename in res_dict:
+                        got_new_contents = True
                     break
                 except json.decoder.JSONDecodeError as e:
                     print(e)
                     print('retrying file...')
-            if not got_new_contents:
-                print('no change => skipping')
-                continue
-            print('got changes. processing')
-            files[filename] = res_dict[filename]
-            assert '..' not in filename
-            _target_file_path = join(args.in_working_dir, filename)
-            _target_file_parent_dir = path.dirname(_target_file_path)
-            if not path.isdir(_target_file_parent_dir):
-                os.makedirs(_target_file_parent_dir)
-                print('created dir', _target_file_parent_dir)
-            with open(_target_file_path, 'w') as f:
-                f.write(res_dict[filename])
+            if got_new_contents:
+                print('got changes. processing')
+                files[filename] = res_dict[filename]
+                assert '..' not in filename
+                _target_file_path = join(args.in_working_dir, filename)
+                _target_file_parent_dir = path.dirname(_target_file_path)
+                if not path.isdir(_target_file_parent_dir):
+                    os.makedirs(_target_file_parent_dir)
+                    print('created dir', _target_file_parent_dir)
+                with open(_target_file_path, 'w') as f:
+                    f.write(res_dict[filename])
+            else:
+                print('no change to file')
             if 'updated_api' in res_dict and len(res_dict['updated_api']) > 0:
                 print('updating api spec')
                 for filename, file_spec in res_dict['updated_api'].items():
-                    api_spec[filename] = file_spec
-                with open(api_spec_filepath, 'w') as f:
-                    json.dump(api_spec, f, indent=2)
-                    print('saved api_spec to ', api_spec_filepath)
-                api_spec_updated = True
-                break
+                    if api_spec[filename] != file_spec:
+                        api_spec[filename] = file_spec
+                        api_spec_updated = True
+                if api_spec_updated:
+                    with open(api_spec_filepath, 'w') as f:
+                        json.dump(api_spec, f, indent=2)
+                        print('saved updated api_spec to ', api_spec_filepath)
+                    break
 
 
 if __name__ == '__main__':
