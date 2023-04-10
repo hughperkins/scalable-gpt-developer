@@ -1,6 +1,5 @@
 import os
 import openai
-import json
 from aiohttp import web
 from response_parser import parse_response
 
@@ -22,3 +21,4 @@ async def handle_chat_request(request):
         return web.json_response({'completion': parsed_response, 'files': files})
     except Exception as e:
         return web.json_response({'error': str(e)}, status=500)
+

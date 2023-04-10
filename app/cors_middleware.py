@@ -1,8 +1,7 @@
-import aiohttp
-from aiohttp import web_middlewares
+import aiohttp.web.middlewares
 
 
-@web_middlewares.middleware
+@aiohttp.web.middlewares.middleware
 async def cors_middleware(request, handler):
     response = await handler(request)
     response.headers['Access-Control-Allow-Origin'] = '*'

@@ -1,21 +1,26 @@
 {
   "server.py": {
     "depends": [
-      "aiohttp",
-      "routes.py",
-      "cors_middleware.py"
+      "os",
+      "aiohttp.web",
+      "aiohttp.web.FileResponse",
+      "aiohttp.web.RouteTableDef",
+      "handlers",
+      "middlewares.cors_middleware"
     ]
   },
   "routes.py": {
     "depends": [
-      "handlers.py"
+      "handlers.handle_chat_request",
+      "aiohttp.web"
     ]
   },
   "handlers.py": {
     "depends": [
-      "openai",
       "os",
-      "response_parser.py"
+      "openai",
+      "aiohttp.web",
+      "response_parser"
     ]
   },
   "response_parser.py": {
@@ -23,14 +28,15 @@
   },
   "cors_middleware.py": {
     "depends": [
-      "aiohttp.web_middlewares"
+      "aiohttp.web.middlewares"
     ]
   },
   "client/package.json": {
     "depends": [
       "react",
       "react-dom",
-      "axios"
+      "axios",
+      "react-modal"
     ]
   },
   "client/src/index.js": {
@@ -38,7 +44,8 @@
       "client/src/App.js",
       "client/src/index.css",
       "react",
-      "react-dom"
+      "react-dom",
+      "client/src/serviceWorker.js"
     ]
   },
   "client/src/App.js": {
@@ -48,35 +55,49 @@
       "client/src/PromptForm.js",
       "client/src/CompletionBox.js",
       "client/src/App.css",
+      "axios",
       "react",
-      "axios"
+      "react-dom"
     ]
   },
   "client/src/FileModal.js": {
     "depends": [
-      "react"
+      "react",
+      "react-dom",
+      "react-modal",
+      "PropTypes"
     ]
   },
   "client/src/FileList.js": {
     "depends": [
       "react",
-      "client/src/FileModal.js"
+      "react-dom",
+      "client/src/FileModal.js",
+      "react-modal",
+      "PropTypes"
     ]
   },
   "client/src/PromptForm.js": {
     "depends": [
-      "react"
+      "react",
+      "react-dom",
+      "PropTypes"
     ]
   },
   "client/src/CompletionBox.js": {
     "depends": [
-      "react"
+      "react",
+      "react-dom",
+      "PropTypes"
     ]
   },
   "client/src/App.css": {
     "depends": []
   },
   "client/src/index.css": {
+    "depends": []
+  },
+  "client/src/serviceWorker.js": {
     "depends": []
   }
 }

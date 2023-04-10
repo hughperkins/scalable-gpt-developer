@@ -1,4 +1,3 @@
-from aiohttp import web
 from handlers import handle_chat_request
 
 
