@@ -91,7 +91,7 @@ are required to the file, then do NOT add {filename} to output_dict.
 
 Please add a key to output_dict 'thoughts', which is a list of your thoughts. Please think step by step about each
 change required, and write each thought concisely into 'thoughts' value. Please write out the thoughts key first, before
-any other keys
+any other keys. Don't think about other files, only {filename}, the Task, and the api spec for {filename}.
 
 Do not write any explanations. Only output output_dict.
 """

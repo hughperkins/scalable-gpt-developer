@@ -59,9 +59,10 @@ Module not found: Can't resolve 'react-modal' in '/Users/hugh/git/scalable-gpt-d
 
 Sometimes the completion will contain files, which will be formatted something like:
 
-some_file_name.py
+[some_file_name].py
 ```python
 the file contents goes here
 ```
 
+The exact filename will vary, and you will need to extract it from the text.
 When such files exist, please do not display these files in the completion text box. Instead, please create a list of filenames on the left. If I click on one of these filenames, the contents will show in a modal window, with a scrollbar. I should be able to easily click into the window, use ctrl-a to select all, then ctrl-c to copy the contents of the file. The remainder of the completion should still be shown, separately.
