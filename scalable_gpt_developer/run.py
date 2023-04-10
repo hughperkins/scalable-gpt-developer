@@ -9,171 +9,7 @@ import json
 import shutil
 import tenacity
 
-
-api_spec_instructions = """api_spec description:
-
-api_spec is a dictionary. The keys are the filepaths of
-each file in the project. Each value contains the api information about that file,
-sufficient that someone can write a correct implementation of that file, without
-reading any other parts of the program. The format of this value is a dictionary,
-which we will refer to here as api_info.
-
-'imported_functions' key
-Describes any functions that are imported by the file,
-from other files. Do not include functions imported from system libraries, or third-party libraries,
-or built-in libraries. It includes full details of parameter names and types, and return type.
-Make sure to include the full path to the function, including any packages or similar.
-Do NOT include calls to system libraries, built-in libraries, or third-party libraries.
-ONLY include calls to other files in this application.
-
-'imported_classes' key
-Describes any classes that are imported by the file.
-
-'consumed_web_methods' key
-Describes any http methods consumed by the file, using e.g. get or post.
-The format of both the json request, and the json response, should be fully and clearly specified.
-
-'exported_functions' key
-Give the names of any exported functions. Give a brief description of each.
-
-'exported_classes' key
-Give the names of any exported classes. Give a brief description of each.
-
-'published_web_methods' key
-Describes the url and http method of any http methods published by the file.
-Give a brief description of each method.
-
-In general, try not to use dictionaries when specifying function and method parameters, or return types. Use classes
-instead, e.g. dataclasses, or named tuples.
-
-Make sure that any names used in the project, including filenames and function names,
-are not easy to confuse with external library names, or with system library names.
-
-Make sure that all filepaths are relative paths, not absolute paths.
-"""
-
-updating_api_spec = """If you find that the api_spec is wrong, or inconsistent, or lacks detail, please add a key to
-output_dict 'updated_api'. The value for this key should be another dictionary, let's call
-it updated_api_info. updated_api_info should contain a key for each filename whose api you need to update,
-and the value should be the full updated api_info for that file. Do not add keys for files whose api does not need
-updating.
-"""
-
-file_instructions_python = """Please ensure that mypy types are added to all method and function parameters, and to the return type.
-Please ensure that it is pep8-compliant."""
-
-file_instructions_javascript = """NEVER use a default export. ALWAYS use named exports. Always use named imports when importing
-from other project files. In other words export like this:
-```
-export const my_func = () => {
-
-};
-```
-
-Do not export like this:
-```
-export default my_func;
-```"""
-
-file_correctness_check = """File correctness check:
-Please check the contents of the file against the api_spec, against the linter_output, for correctness.
-If the file calls a function imported from another file, that function MUST be defined in the api
-spec for the other file.
-
-If the contents of the file need to be updated, please add a key {filename} to output_dict, where
-the value is a string which is the complete updated implementation of {filename}.
-If no changes are needed to the file do NOT add the key {filename} to output_dict.
-
-If you are unable to write the full implementation, then make sure to update the api spec
-so that you have sufficient information to complete the task; or update the api spec to break the file into
-multiple smaller files.
-"""
-
-g_prompt_initial = """Task:
-{task}
-(End of task description)
-
-Please divide the project into small self-contained classes or similar.
-
-Please start by creating api_spec json document.
-
-{api_spec_instructions}
-
-Output only the api_spec json dictionary. Do not write any explanations.
-"""
-
-
-g_prompt_file = """Task:
-{task}
-(End of task description)
-
-Here is a set of api specifications you wrote earlier:
-```
-{api_spec}
-```
-
-{api_spec_instructions}
-
-You are going to write the full implementation of the file {filename}.
-
-{file_correctness_check}
-
-{file_instructions_lang_specific}
-
-Please output a json dictionary, which we will refer to as output_dict.
-Add a key {filename} to output_dict, whose value is a string which is the complete implementation of {filename}.
-
-{updating_api_spec}
-
-Output only output_dict. Do not write explanations.
-"""
-
-
-g_prompt_file_update = """Task:
-{task}
-(End of task description)
-
-Here is a set of api specifications you wrote earlier:
-```
-{api_spec}
-```
-
-{api_spec_instructions}
-
-Here is the current contents of {filename}:
-```
-{file_contents}
-```
-
-Linter output:
-```
-{linter_output}
-```
-
-Output:
-Your output should be a json dictionary. We will refer to it here as output_dict.
-
-{file_instructions_lang_specific}
-
-{file_correctness_check}
-
-{api_spec_instructions}
-
-{updating_api_spec}
-
-If you need to update the file, or the api_spec,
-please add a key to the output json 'reason', where you explain what you've changed in
-the file; and a key {filename} whose value is a string containing the full corrected implementation.
-
-please add a key to output_dict 'thoughts', which is a list of your thoughts. Please think step by step about each
-change required, and write each thought concisely into 'thoughts' value. Please write out the thoughts key first, before
-any other keys
-
-Do not write any explanations. Only output output_dict.
-"""
-
-# If the file is completely correct, and the api_spec is sufficient to unambiguously ensure that the rest of the
-# application will work fine, and only then, then please add a key 'valid' to output_dict, with the value 'true'.
+from scalable_gpt_developer import api_spec_prompts, file_prompts
 
 
 @tenacity.retry(stop=tenacity.stop_after_attempt(7), wait=tenacity.wait_fixed(0.1))
@@ -237,7 +73,8 @@ def run(args):
         with open(api_spec_filepath) as f:
             api_spec = json.load(f)
     if api_spec is None:
-        prompt = g_prompt_initial.format(task=task, api_spec_instructions=api_spec_instructions)
+        prompt = api_spec_prompts.prompt_create_api_spec.format(
+            task=task, api_spec_instructions=api_spec_prompts.api_spec_instructions)
         while True:
             try:
                 res_str = run_openai(prompt=prompt, model=args.model)
@@ -262,43 +99,45 @@ def run(args):
     api_spec_updated = True
     while api_spec_updated:
         api_spec_updated = False
-        for filename in api_spec.keys():
+        for filename, filename_api_spec in api_spec.items():
             if args.rewrite_specific_file is not None and filename != args.rewrite_specific_file:
                 continue
             print(filename)
             got_new_contents = False
             target_file_path = join(args.working_dir, filename)
-            target_file_rel_dir = path.dirname(filename)
             target_file_parent_dir = path.dirname(target_file_path)
             while True:
                 try:
                     file_instructions_lang_specific = ''
                     filetype = '.' + filename.split('.')[-1].lower()
                     if filetype == '.py':
-                        file_instructions_lang_specific = file_instructions_python
+                        file_instructions_lang_specific = file_prompts.file_instructions_python
                     elif filetype in ['.js', '.jsx', '.tsx']:
-                        file_instructions_lang_specific = file_instructions_javascript
+                        file_instructions_lang_specific = file_prompts.file_instructions_javascript
                     if filename in files:
                         # existing file
                         if filename.endswith('.py'):
                             linter_output = run_flake8(working_dir=args.working_dir, rel_filepath=filename)
                         else:
                             linter_output = ''
-                        prompt = g_prompt_file_update.format(
-                            api_spec=api_spec, filename=filename, task=task, file_contents=files[filename],
+                        prompt = file_prompts.prompt_update_file.format(
+                            filename_api_spec=filename_api_spec,
+                            filename=filename,
+                            task=task,
+                            prompt_api_spec_fail=file_prompts.prompt_api_spec_fail,
+                            file_contents=files[filename],
                             linter_output=linter_output,
-                            api_spec_instructions=api_spec_instructions,
-                            file_correctness_check=file_correctness_check,
-                            file_instructions_lang_specific=file_instructions_lang_specific,
-                            updating_api_spec=updating_api_spec)
+                            file_correctness_check=file_prompts.file_correctness_check,
+                            file_instructions_lang_specific=file_instructions_lang_specific)
                     else:
                         # new file
-                        prompt = g_prompt_file.format(
-                            api_spec=api_spec, filename=filename, task=task,
-                            api_spec_instructions=api_spec_instructions,
-                            file_correctness_check=file_correctness_check,
-                            file_instructions_lang_specific=file_instructions_lang_specific,
-                            updating_api_spec=updating_api_spec)
+                        prompt = file_prompts.prompt_create_file.format(
+                            filename_api_spec=filename_api_spec,
+                            filename=filename,
+                            task=task,
+                            prompt_api_spec_fail=file_prompts.prompt_api_spec_fail,
+                            file_correctness_check=file_prompts.file_correctness_check,
+                            file_instructions_lang_specific=file_instructions_lang_specific)
                     if args.prompt_dir is not None and args.prompt_dir != '':
                         _prompt_filepath = f'{args.prompt_dir}/{filename}.prompt.txt'
                         _prompt_parent_dir = path.dirname(_prompt_filepath)
