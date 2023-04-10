@@ -1,103 +1,132 @@
 {
-  "server.py": {
-    "depends": [
-      "os",
-      "aiohttp.web",
-      "aiohttp.web.FileResponse",
-      "aiohttp.web.RouteTableDef",
-      "handlers",
-      "middlewares.cors_middleware"
-    ]
+  "aiohttp_server.py": {
+    "imported_functions": {
+      "create_app": {
+        "filepath": "app.py",
+        "description": "Create an aiohttp application."
+      }
+    },
+    "imported_classes": {},
+    "consumed_web_methods": {},
+    "exported_functions": {
+      "main": {
+        "description": "Run the aiohttp server."
+      }
+    },
+    "exported_classes": {},
+    "published_web_methods": {}
   },
-  "routes.py": {
-    "depends": [
-      "handlers.handle_chat_request",
-      "aiohttp.web"
-    ]
+  "app.py": {
+    "imported_functions": {
+      "chat_handler": {
+        "filepath": "handlers/chat_handler.py",
+        "description": "Handle chat requests from the frontend."
+      }
+    },
+    "imported_classes": {},
+    "consumed_web_methods": {},
+    "exported_functions": {
+      "create_app": {
+        "description": "Create an aiohttp application."
+      }
+    },
+    "exported_classes": {},
+    "published_web_methods": {
+      "POST /chat": {
+        "description": "Receive a chat message and return a generated response.",
+        "request_format": {
+          "prompt": "string"
+        },
+        "response_format": {
+          "completion": "string"
+        }
+      }
+    }
   },
-  "handlers.py": {
-    "depends": [
-      "os",
-      "openai",
-      "aiohttp.web",
-      "response_parser"
-    ]
+  "handlers/chat_handler.py": {
+    "imported_functions": {
+      "get_chat_completion": {
+        "filepath": "ai_chat.py",
+        "description": "Get the chat completion from the AI model."
+      }
+    },
+    "imported_classes": {},
+    "consumed_web_methods": {},
+    "exported_functions": {
+      "chat_handler": {
+        "description": "Handle chat requests from the frontend."
+      }
+    },
+    "exported_classes": {},
+    "published_web_methods": {}
   },
-  "response_parser.py": {
-    "depends": []
+  "ai_chat.py": {
+    "imported_functions": {},
+    "imported_classes": {},
+    "consumed_web_methods": {},
+    "exported_functions": {
+      "get_chat_completion": {
+        "description": "Get the chat completion from the AI model.",
+        "parameters": {
+          "model": "string",
+          "messages": "list"
+        },
+        "return_type": "string"
+      }
+    },
+    "exported_classes": {},
+    "published_web_methods": {}
   },
-  "cors_middleware.py": {
-    "depends": [
-      "aiohttp.web.middlewares"
-    ]
+  "frontend/src/index.js": {
+    "imported_functions": {},
+    "imported_classes": {
+      "ChatApp": {
+        "filepath": "frontend/src/components/ChatApp.js",
+        "description": "React component implementing the main chat application."
+      }
+    },
+    "consumed_web_methods": {},
+    "exported_functions": {},
+    "exported_classes": {},
+    "published_web_methods": {}
   },
-  "client/package.json": {
-    "depends": [
-      "react",
-      "react-dom",
-      "axios",
-      "react-modal"
-    ]
+  "frontend/src/components/ChatApp.js": {
+    "imported_functions": {},
+    "imported_classes": {
+      "FileModal": {
+        "filepath": "frontend/src/components/FileModal.js",
+        "description": "React component for displaying file content in a modal."
+      }
+    },
+    "consumed_web_methods": {
+      "POST /chat": {
+        "description": "Send a chat message and receive a generated response.",
+        "request_format": {
+          "prompt": "string"
+        },
+        "response_format": {
+          "completion": "string"
+        }
+      }
+    },
+    "exported_functions": {},
+    "exported_classes": {
+      "ChatApp": {
+        "description": "React component implementing the main chat application."
+      }
+    },
+    "published_web_methods": {}
   },
-  "client/src/index.js": {
-    "depends": [
-      "client/src/App.js",
-      "client/src/index.css",
-      "react",
-      "react-dom",
-      "client/src/serviceWorker.js"
-    ]
-  },
-  "client/src/App.js": {
-    "depends": [
-      "client/src/FileModal.js",
-      "client/src/FileList.js",
-      "client/src/PromptForm.js",
-      "client/src/CompletionBox.js",
-      "client/src/App.css",
-      "axios",
-      "react",
-      "react-dom"
-    ]
-  },
-  "client/src/FileModal.js": {
-    "depends": [
-      "react",
-      "react-dom",
-      "react-modal",
-      "PropTypes"
-    ]
-  },
-  "client/src/FileList.js": {
-    "depends": [
-      "react",
-      "react-dom",
-      "client/src/FileModal.js",
-      "react-modal",
-      "PropTypes"
-    ]
-  },
-  "client/src/PromptForm.js": {
-    "depends": [
-      "react",
-      "react-dom",
-      "PropTypes"
-    ]
-  },
-  "client/src/CompletionBox.js": {
-    "depends": [
-      "react",
-      "react-dom",
-      "PropTypes"
-    ]
-  },
-  "client/src/App.css": {
-    "depends": []
-  },
-  "client/src/index.css": {
-    "depends": []
-  },
-  "client/src/serviceWorker.js": {
-    "depends": []
+  "frontend/src/components/FileModal.js": {
+    "imported_functions": {},
+    "imported_classes": {},
+    "consumed_web_methods": {},
+    "exported_functions": {},
+    "exported_classes": {
+      "FileModal": {
+        "description": "React component for displaying file content in a modal."
+      }
+    },
+    "published_web_methods": {}
   }
 }

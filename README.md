@@ -47,8 +47,8 @@ otherwise that file is updated with the new contents.
 
 ```
 python scalable_gpt_developer/run.py \
-    [--in-task-file PATH_TO_TASK_DESCRIPTION_TEXT_FILE ] \
-    [--in-working-dir PATH_TO_DIRECTORY_INTO_WHICH_TO_GENERATE_FILES] \
+    [--task-file PATH_TO_TASK_DESCRIPTION_TEXT_FILE ] \
+    [--working-dir PATH_TO_DIRECTORY_INTO_WHICH_TO_GENERATE_FILES] \
     [--wipe-working-dir] \
     [--model MODEL_TYPE]
 ```
