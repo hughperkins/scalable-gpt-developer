@@ -13,23 +13,28 @@ or built-in libraries. It includes full details of parameter names and types, an
 Make sure to include the full path to the function, including any packages or similar.
 Do NOT include calls to system libraries, built-in libraries, or third-party libraries.
 ONLY include calls to other files in this application.
+If no imported functions, then omit this key.
 
 'imported_classes' key
-Describes any classes that are imported by the file.
+Describes any classes that are imported by the file. If none, then omit this key.
 
 'consumed_web_methods' key
 Describes any http methods consumed by the file, using e.g. get or post.
 The format of both the json request, and the json response, should be fully and clearly specified.
+If no consumed web methods, then omit this key.
 
 'exported_functions' key
 Give the names of any exported functions. Give a brief description of each.
+If no exported functions, then omit this key.
 
 'exported_classes' key
 Give the names of any exported classes. Give a brief description of each.
+If no exported classes, then omit this key.
 
 'published_web_methods' key
 Describes the url and http method of any http methods published by the file.
 Give a brief description of each method.
+If no published web methods, then omit this key.
 
 In general, try not to use dictionaries when specifying function and method parameters, or return types. Use classes
 instead, e.g. dataclasses, or named tuples.
