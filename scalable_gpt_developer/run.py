@@ -1,6 +1,7 @@
 # assumes that openai api key is in env var OPENAI_API_KEY
 import os
 import subprocess
+from typing import Dict
 import openai
 import argparse
 from os import path
@@ -29,163 +30,174 @@ def run_openai(prompt, model) -> str:
     return res_str
 
 
-def load_files(base_dir: str, files: dict[str, str], rel_dir: str, exclude_dirs: list[str]) -> None:
-    dir_path = join(base_dir, rel_dir)
-    for filename in os.listdir(dir_path):
-        _full_path = join(dir_path, filename)
-        if path.isdir(_full_path):
-            if filename not in exclude_dirs:
-                load_files(base_dir=base_dir, files=files, rel_dir=join(rel_dir, filename), exclude_dirs=exclude_dirs)
-        elif path.isfile(_full_path):
-            with open(_full_path) as f:
-                _contents = f.read()
-            rel_filepath = join(rel_dir, filename)
-            if rel_filepath.startswith('./'):
-                rel_filepath = rel_filepath[2:]
-            files[rel_filepath] = _contents
-            print('loaded', rel_filepath)
+class GptDeveloper:
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
 
+    def run(self) -> None:
+        if args.wipe_working_dir:
+            assert args.working_dir not in ['', '.', '/']
+            if os.path.exists(args.working_dir):
+                shutil.rmtree(args.working_dir)
+        if not os.path.exists(args.working_dir):
+            os.makedirs(args.working_dir)
 
-def run_flake8(working_dir: str, rel_filepath: str) -> str:
-    p = subprocess.run(['flake8', rel_filepath], cwd=working_dir, stdout=subprocess.PIPE)
-    flake8_output = p.stdout.decode('utf-8')
-    return flake8_output
+        self.files: Dict[str, str] = {}
+        self.load_files(args.working_dir, self.files, '.', args.exclude_dirs)
 
+        with open(args.task_file) as f:
+            self.task = f.read()
+        print('task', self.task)
 
-def run(args):
-    if args.wipe_working_dir:
-        assert args.working_dir not in ['', '.', '/']
-        if os.path.exists(args.working_dir):
-            shutil.rmtree(args.working_dir)
-    if not os.path.exists(args.working_dir):
-        os.makedirs(args.working_dir)
+        self.api_spec = None
+        self.api_spec_filepath = os.path.join(args.working_dir, 'api_spec.json')
+        if os.path.isfile(self.api_spec_filepath):
+            with open(self.api_spec_filepath) as f:
+                self.api_spec = json.load(f)
+        if self.api_spec is None:
+            self.create_api_spec()
+            self.verify_api_spec()
 
-    files = {}
-    load_files(args.working_dir, files, '.', args.exclude_dirs)
+        if self.api_spec is not None and args.wipe_missing_from_api_spec:
+            _file_names = list(self.files.keys())
+            for filename in _file_names:
+                if filename not in self.api_spec and filename != 'api_spec.json':
+                    _filepath = join(args.working_dir, filename)
+                    os.remove(_filepath)
+                    print('wiped file not in api spec: ', _filepath)
+                    del self.files[filename]
+        api_spec_updated = True
+        while api_spec_updated:
+            api_spec_updated = False
+            for filename, filename_api_spec in self.api_spec.items():
+                if args.rewrite_specific_file is not None and filename != args.rewrite_specific_file:
+                    continue
+                print(filename)
+                got_new_contents = False
+                target_file_path = join(args.working_dir, filename)
+                target_file_parent_dir = path.dirname(target_file_path)
+                while True:
+                    try:
+                        file_instructions_lang_specific = ''
+                        filetype = '.' + filename.split('.')[-1].lower()
+                        if filetype == '.py':
+                            file_instructions_lang_specific = file_prompts.file_instructions_python
+                        elif filetype in ['.js', '.jsx', '.tsx']:
+                            file_instructions_lang_specific = file_prompts.file_instructions_javascript
+                        if filename in self.files:
+                            # existing file
+                            if filename.endswith('.py'):
+                                linter_output = self.run_flake8(working_dir=args.working_dir, rel_filepath=filename)
+                            else:
+                                linter_output = ''
+                            prompt = file_prompts.prompt_update_file.format(
+                                filename_api_spec=filename_api_spec,
+                                filename=filename,
+                                task=self.task,
+                                prompt_api_spec_fail=file_prompts.prompt_api_spec_fail,
+                                file_contents=self.files[filename],
+                                linter_output=linter_output,
+                                file_correctness_check=file_prompts.file_correctness_check,
+                                file_instructions_lang_specific=file_instructions_lang_specific)
+                        else:
+                            # new file
+                            prompt = file_prompts.prompt_create_file.format(
+                                filename_api_spec=filename_api_spec,
+                                filename=filename,
+                                task=self.task,
+                                prompt_api_spec_fail=file_prompts.prompt_api_spec_fail,
+                                file_correctness_check=file_prompts.file_correctness_check,
+                                file_instructions_lang_specific=file_instructions_lang_specific)
+                        if args.prompt_dir is not None and args.prompt_dir != '':
+                            _prompt_filepath = f'{args.prompt_dir}/{filename}.prompt.txt'
+                            _prompt_parent_dir = path.dirname(_prompt_filepath)
+                            if not path.exists(_prompt_parent_dir):
+                                os.makedirs(_prompt_parent_dir)
+                            with open(_prompt_filepath, 'w') as f:
+                                f.write(prompt)
+                        res_str = run_openai(prompt=prompt, model=args.model)
+                        # if res_str.strip().upper() == 'VALID':
+                        #     got_new_contents = False
+                        #     break
+                        # res_str = res_str.replace('None', 'null')
+                        res_dict = json.loads(res_str)
+                        # if 'valid' in res_dict:
+                        #     got_new_contents = False
+                        #     continue
+                        if filename in res_dict:
+                            got_new_contents = True
+                        break
+                    except json.decoder.JSONDecodeError as e:
+                        print(e)
+                        print('retrying file...')
+                if got_new_contents:
+                    print('got changes. processing', filename)
+                    self.files[filename] = res_dict[filename]
+                    assert '..' not in filename
+                    assert not filename.startswith('/')
+                    # if filename.startswith('/'):
+                    #     filename = filename[1:]
+                    if not path.isdir(target_file_parent_dir):
+                        os.makedirs(target_file_parent_dir)
+                        print('created dir', target_file_parent_dir)
+                    with open(target_file_path, 'w') as f:
+                        f.write(res_dict[filename])
+                        print('wrote', target_file_path)
+                else:
+                    print('no change to file')
+                if 'updated_api' in res_dict and len(res_dict['updated_api']) > 0:
+                    print('updating api spec')
+                    for filename, file_spec in res_dict['updated_api'].items():
+                        if self.api_spec[filename] != file_spec:
+                            self.api_spec[filename] = file_spec
+                            api_spec_updated = True
+                    if api_spec_updated:
+                        with open(self.api_spec_filepath, 'w') as f:
+                            json.dump(self.api_spec, f, indent=2)
+                            print('saved updated api_spec to ', self.api_spec_filepath)
+                        break
 
-    with open(args.task_file) as f:
-        task = f.read()
-    print('task', task)
+    def load_files(self, base_dir: str, files: dict[str, str], rel_dir: str, exclude_dirs: list[str]) -> None:
+        dir_path = join(base_dir, rel_dir)
+        for filename in os.listdir(dir_path):
+            _full_path = join(dir_path, filename)
+            if path.isdir(_full_path):
+                if filename not in exclude_dirs:
+                    self.load_files(
+                        base_dir=base_dir, files=files, rel_dir=join(rel_dir, filename), exclude_dirs=exclude_dirs)
+            elif path.isfile(_full_path):
+                with open(_full_path) as f:
+                    _contents = f.read()
+                rel_filepath = join(rel_dir, filename)
+                if rel_filepath.startswith('./'):
+                    rel_filepath = rel_filepath[2:]
+                files[rel_filepath] = _contents
+                print('loaded', rel_filepath)
 
-    api_spec = None
-    api_spec_filepath = os.path.join(args.working_dir, 'api_spec.json')
-    if os.path.isfile(api_spec_filepath):
-        with open(api_spec_filepath) as f:
-            api_spec = json.load(f)
-    if api_spec is None:
+    def run_flake8(self, working_dir: str, rel_filepath: str) -> str:
+        p = subprocess.run(['flake8', rel_filepath], cwd=working_dir, stdout=subprocess.PIPE)
+        flake8_output = p.stdout.decode('utf-8')
+        return flake8_output
+
+    def create_api_spec(self):
         prompt = api_spec_prompts.prompt_create_api_spec.format(
-            task=task, api_spec_instructions=api_spec_prompts.api_spec_instructions)
+            task=self.task, api_spec_instructions=api_spec_prompts.api_spec_instructions)
         while True:
             try:
                 res_str = run_openai(prompt=prompt, model=args.model)
                 res_str = res_str.replace('None', 'null')
-                api_spec = json.loads(res_str)
+                self.api_spec = json.loads(res_str)
                 break
             except json.decoder.JSONDecodeError as e:
                 print(e)
                 print('retrying file...')
-        with open(api_spec_filepath, 'w') as f:
-            json.dump(api_spec, f, indent=2)
-            print('saved api_spec to ', api_spec_filepath)
+        with open(self.api_spec_filepath, 'w') as f:
+            json.dump(self.api_spec, f, indent=2)
+            print('saved api_spec to ', self.api_spec_filepath)
 
-    if api_spec is not None and args.wipe_missing_from_api_spec:
-        _file_names = list(files.keys())
-        for filename in _file_names:
-            if filename not in api_spec and filename != 'api_spec.json':
-                _filepath = join(args.working_dir, filename)
-                os.remove(_filepath)
-                print('wiped file not in api spec: ', _filepath)
-                del files[filename]
-    api_spec_updated = True
-    while api_spec_updated:
-        api_spec_updated = False
-        for filename, filename_api_spec in api_spec.items():
-            if args.rewrite_specific_file is not None and filename != args.rewrite_specific_file:
-                continue
-            print(filename)
-            got_new_contents = False
-            target_file_path = join(args.working_dir, filename)
-            target_file_parent_dir = path.dirname(target_file_path)
-            while True:
-                try:
-                    file_instructions_lang_specific = ''
-                    filetype = '.' + filename.split('.')[-1].lower()
-                    if filetype == '.py':
-                        file_instructions_lang_specific = file_prompts.file_instructions_python
-                    elif filetype in ['.js', '.jsx', '.tsx']:
-                        file_instructions_lang_specific = file_prompts.file_instructions_javascript
-                    if filename in files:
-                        # existing file
-                        if filename.endswith('.py'):
-                            linter_output = run_flake8(working_dir=args.working_dir, rel_filepath=filename)
-                        else:
-                            linter_output = ''
-                        prompt = file_prompts.prompt_update_file.format(
-                            filename_api_spec=filename_api_spec,
-                            filename=filename,
-                            task=task,
-                            prompt_api_spec_fail=file_prompts.prompt_api_spec_fail,
-                            file_contents=files[filename],
-                            linter_output=linter_output,
-                            file_correctness_check=file_prompts.file_correctness_check,
-                            file_instructions_lang_specific=file_instructions_lang_specific)
-                    else:
-                        # new file
-                        prompt = file_prompts.prompt_create_file.format(
-                            filename_api_spec=filename_api_spec,
-                            filename=filename,
-                            task=task,
-                            prompt_api_spec_fail=file_prompts.prompt_api_spec_fail,
-                            file_correctness_check=file_prompts.file_correctness_check,
-                            file_instructions_lang_specific=file_instructions_lang_specific)
-                    if args.prompt_dir is not None and args.prompt_dir != '':
-                        _prompt_filepath = f'{args.prompt_dir}/{filename}.prompt.txt'
-                        _prompt_parent_dir = path.dirname(_prompt_filepath)
-                        if not path.exists(_prompt_parent_dir):
-                            os.makedirs(_prompt_parent_dir)
-                        with open(_prompt_filepath, 'w') as f:
-                            f.write(prompt)
-                    res_str = run_openai(prompt=prompt, model=args.model)
-                    # if res_str.strip().upper() == 'VALID':
-                    #     got_new_contents = False
-                    #     break
-                    # res_str = res_str.replace('None', 'null')
-                    res_dict = json.loads(res_str)
-                    # if 'valid' in res_dict:
-                    #     got_new_contents = False
-                    #     continue
-                    if filename in res_dict:
-                        got_new_contents = True
-                    break
-                except json.decoder.JSONDecodeError as e:
-                    print(e)
-                    print('retrying file...')
-            if got_new_contents:
-                print('got changes. processing', filename)
-                files[filename] = res_dict[filename]
-                assert '..' not in filename
-                assert not filename.startswith('/')
-                # if filename.startswith('/'):
-                #     filename = filename[1:]
-                if not path.isdir(target_file_parent_dir):
-                    os.makedirs(target_file_parent_dir)
-                    print('created dir', target_file_parent_dir)
-                with open(target_file_path, 'w') as f:
-                    f.write(res_dict[filename])
-                    print('wrote', target_file_path)
-            else:
-                print('no change to file')
-            if 'updated_api' in res_dict and len(res_dict['updated_api']) > 0:
-                print('updating api spec')
-                for filename, file_spec in res_dict['updated_api'].items():
-                    if api_spec[filename] != file_spec:
-                        api_spec[filename] = file_spec
-                        api_spec_updated = True
-                if api_spec_updated:
-                    with open(api_spec_filepath, 'w') as f:
-                        json.dump(api_spec, f, indent=2)
-                        print('saved updated api_spec to ', api_spec_filepath)
-                    break
+
+def run(args):
+    GptDeveloper(args).run()
 
 
 if __name__ == '__main__':
