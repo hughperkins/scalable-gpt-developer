@@ -83,15 +83,18 @@ Your output should be a json dictionary. We will refer to it here as output_dict
 
 {file_correctness_check}
 
-If you need to update the file, please add a key to output_dict 'reason', where you explain what you've changed in
-the file; and a key {filename} whose value is a string containing the full corrected implementation. If no changes
-are required to the file, then do NOT add {filename} to output_dict.
+Make sure to read the Task description above clearly, and ensure that {filename} will meet
+the task requirements.
+
+Please add a key {filename} to output_dict whose value is a string containing the full contents
+of {filename}. If no changes
+are required to the file, then write out the file exactly the same as the original. Otherwise, make any
+changes required to match the task requirements, and the api spec requirements.
+
+If you needed to update the file, please add a key to output_dict 'reason', where you explain what you've changed in
+the file, and why. 
 
 {prompt_api_spec_fail}
-
-Please add a key to output_dict 'thoughts', which is a list of your thoughts. Please think step by step about each
-change required, and write each thought concisely into 'thoughts' value. Please write out the thoughts key first, before
-any other keys. Don't think about other files, only {filename}, the Task, and the api spec for {filename}.
 
 Do not write any explanations. Only output output_dict.
 """

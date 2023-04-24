@@ -16,7 +16,8 @@ ONLY include calls to other files in this application.
 If no imported functions, then omit this key.
 
 'imported_classes' key
-Describes any classes that are imported by the file. If none, then omit this key.
+Describes any classes that are imported by the file.
+If none, then omit this key.
 
 'consumed_web_methods' key
 Describes any http methods consumed by the file, using e.g. get or post.
@@ -33,11 +34,12 @@ If no exported classes, then omit this key.
 
 'published_web_methods' key
 Describes the url and http method of any http methods published by the file.
-Give a brief description of each method.
+Give a brief description of each method. Include the format of the incoming json request
+and the outgoing json response.
 If no published web methods, then omit this key.
 
-In general, try not to use dictionaries when specifying function and method parameters, or return types. Use classes
-instead, e.g. dataclasses, or named tuples.
+In general, try not to use dictionaries or tuples when specifying function and method parameters, or return types.
+Use classes instead, e.g. dataclasses, or named tuples.
 
 Make sure that any names used in the project, including filenames and function names,
 are not easy to confuse with external library names, or with system library names.
@@ -63,4 +65,20 @@ Please start by creating api_spec json document.
 {api_spec_instructions}
 
 Output only the api_spec json dictionary. Do not write any explanations.
+"""
+
+prompt_verify_api_spec = """Here is a task we want to build an application for:
+```
+{task}
+```
+
+Here are instructions for building an api spec for this task:
+{api_spec_instructions}
+
+Here are existing api specs:
+{api_specs}
+
+Please write out a json dict with the key "updated_api_spec", containing the full api_spec, correcting any mistakes.
+Also add a key "changes" detailing what you have changed, if anything, and why.
+Only output this json dictionary. Do not write any explanations.
 """

@@ -1,7 +1,7 @@
 # assumes that openai api key is in env var OPENAI_API_KEY
 import os
 import subprocess
-from typing import Dict
+from typing import Any, Dict, Optional
 import openai
 import argparse
 from os import path
@@ -10,7 +10,7 @@ import json
 import shutil
 import tenacity
 
-from scalable_gpt_developer import api_spec_prompts, file_prompts
+from scalable_gpt_developer import api_spec_prompts, file_prompts, arch_prompts
 
 
 @tenacity.retry(stop=tenacity.stop_after_attempt(7), wait=tenacity.wait_fixed(0.1))
@@ -33,6 +33,7 @@ def run_openai(prompt, model) -> str:
 class GptDeveloper:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
+        self.api_spec: Optional[Dict[str, Dict[str, Any]]]
 
     def run(self) -> None:
         if args.wipe_working_dir:
@@ -49,14 +50,25 @@ class GptDeveloper:
             self.task = f.read()
         print('task', self.task)
 
-        self.api_spec = None
+        self.arch_spec: Optional[Dict[str, Dict[str, Any]]] = None
+        self.arch_spec_filepath = os.path.join(args.working_dir, 'arch_spec.json')
+        if os.path.isfile(self.arch_spec_filepath):
+            with open(self.arch_spec_filepath) as f:
+                self.arch_spec: Optional[Dict[str, Dict[str, Any]]] = json.load(f)
+        if self.arch_spec is None:
+            self.create_arch_spec()
+        assert self.arch_spec is not None
+        self.verify_arch_spec()
+
+        self.api_spec: Optional[Dict[str, Dict[str, Any]]] = None
         self.api_spec_filepath = os.path.join(args.working_dir, 'api_spec.json')
         if os.path.isfile(self.api_spec_filepath):
             with open(self.api_spec_filepath) as f:
-                self.api_spec = json.load(f)
+                self.api_spec: Optional[Dict[str, Dict[str, Any]]] = json.load(f)
         if self.api_spec is None:
             self.create_api_spec()
             self.verify_api_spec()
+        assert self.api_spec is not None
 
         if self.api_spec is not None and args.wipe_missing_from_api_spec:
             _file_names = list(self.files.keys())
@@ -179,6 +191,42 @@ class GptDeveloper:
         flake8_output = p.stdout.decode('utf-8')
         return flake8_output
 
+    def create_arch_spec(self):
+        prompt = arch_prompts.prompt_create_arch_spec.format(
+            task=self.task, arch_spec_instructions=arch_prompts.arch_spec_instructions)
+        while True:
+            try:
+                res_str = run_openai(prompt=prompt, model=args.model)
+                res_str = res_str.replace('None', 'null')
+                self.arch_spec = json.loads(res_str)
+                break
+            except json.decoder.JSONDecodeError as e:
+                print(e)
+                print('retrying file...')
+        with open(self.arch_spec_filepath, 'w') as f:
+            json.dump(self.arch_spec, f, indent=2)
+            print('saved arch_spec to ', self.arch_spec_filepath)
+
+    def verify_arch_spec(self):
+        prompt = arch_prompts.prompt_verify_arch_spec.format(
+            task=self.task, arch_spec_instructions=arch_prompts.arch_spec_instructions,
+            arch_spec=self.arch_spec)
+        while True:
+            try:
+                res_str = run_openai(prompt=prompt, model=args.model)
+                res_str = res_str.replace('None', 'null')
+                arch_spec_envelope = json.loads(res_str)
+                break
+            except json.decoder.JSONDecodeError as e:
+                print(e)
+                print('retrying file...')
+        print(arch_spec_envelope['changes'])
+        print("different?", arch_spec_envelope['updated_arch_spec'] == self.arch_spec)
+        self.arch_spec = arch_spec_envelope['updated_arch_spec']
+        with open(self.arch_spec_filepath, 'w') as f:
+            json.dump(self.arch_spec, f, indent=2)
+            print('saved updated arch_spec into ', self.arch_spec_filepath)
+
     def create_api_spec(self):
         prompt = api_spec_prompts.prompt_create_api_spec.format(
             task=self.task, api_spec_instructions=api_spec_prompts.api_spec_instructions)
@@ -194,6 +242,26 @@ class GptDeveloper:
         with open(self.api_spec_filepath, 'w') as f:
             json.dump(self.api_spec, f, indent=2)
             print('saved api_spec to ', self.api_spec_filepath)
+
+    def verify_api_spec(self):
+        prompt = api_spec_prompts.prompt_create_api_spec.format(
+            task=self.task, api_spec_instructions=api_spec_prompts.api_spec_instructions,
+            api_spec=self.api_spec)
+        while True:
+            try:
+                res_str = run_openai(prompt=prompt, model=args.model)
+                res_str = res_str.replace('None', 'null')
+                api_spec_envelope = json.loads(res_str)
+                break
+            except json.decoder.JSONDecodeError as e:
+                print(e)
+                print('retrying file...')
+        print(api_spec_envelope['changes'])
+        print("different?", api_spec_envelope['updated_api_spec'] == self.api_spec)
+        self.api_spec = api_spec_envelope['updated_api_spec']
+        with open(self.api_spec_filepath, 'w') as f:
+            json.dump(self.api_spec, f, indent=2)
+            print('saved updated api_spec to ', self.api_spec_filepath)
 
 
 def run(args):
