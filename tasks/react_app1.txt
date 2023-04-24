@@ -1,4 +1,4 @@
-OpenAI has a python completions api that you can call like:
+OpenAI has a python completions api that you can call using a third-party library they provide:
 
 import os
 import openai
@@ -64,5 +64,6 @@ Sometimes the completion will contain files, which will be formatted something l
 the file contents goes here
 ```
 
+[some_file_name] is just a placeholder for where the filename will be.
 The exact filename will vary, and you will need to extract it from the text.
 When such files exist, please do not display these files in the completion text box. Instead, please create a list of filenames on the left. If I click on one of these filenames, the contents will show in a modal window, with a scrollbar. I should be able to easily click into the window, use ctrl-a to select all, then ctrl-c to copy the contents of the file. The remainder of the completion should still be shown, separately.
