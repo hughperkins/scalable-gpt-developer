@@ -29,7 +29,6 @@ def draw_dependency_graph(filepath):
 
 
 if __name__ == "__main__":
-    # file_path = "data.json"
     parser = argparse.ArgumentParser()
     parser.add_argument('--file-path', type=str, required=True)
     args = parser.parse_args()
